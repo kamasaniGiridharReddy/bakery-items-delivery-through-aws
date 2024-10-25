@@ -31,6 +31,18 @@ def get_db_connection():
     except mysql.connector.Error as err:
         print(f"Error: {err}")
         return None
+# Test connection to verify connectivity
+def test_db_connection():
+    try:
+        conn = mysql.connector.connect(**db_config)
+        conn.close()
+        print("Database connection successful.")
+    except mysql.connector.Error as err:
+        print(f"Failed to connect to database: {err}")
+
+# Call test function
+test_db_connection()
+
 
 
 @app.route('/')
