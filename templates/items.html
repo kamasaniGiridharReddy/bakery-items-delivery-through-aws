@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Items</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: #e50808; /* Red background for the header */
+            color: white; /* White text */
+            padding: 20px;
+            text-align: center;
+        }
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3 items per row */
+            gap: 20px;
+        }
+        .item {
+            border: 1px solid #e50808;
+            padding: 10px;
+            text-align: center;
+            background-color: #fff;
+        }
+        .item-image {
+            width: 50%; /* Make the image take the full width of the item */
+            height: 20px; /* Fixed height for consistency */
+            object-fit: cover; /* Ensure the image covers the area without distortion */
+            border-radius: 5px; /* Optional: Add some rounding to the image corners */
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #fff; /* White background */
+            color: #ea0a0a; /* Red text */
+            text-decoration: none;
+            border-radius: 5px;
+            border: 1px solid #ea0a0a; /* Red border */
+            margin-top: 10px;
+        }
+        .button:hover {
+            background-color: #ea0a0a; /* Red on hover */
+            color: white; /* White text on hover */
+        }
+        .total {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Home Button -->
+        <div style="text-align: right; margin-bottom: 20px;">
+            <a href="{{ url_for('home') }}" class="button">Home</a>
+        </div>
+    <div class="container">
+        <header>
+            <h1>Food Items Store</h1>
+        </header>
+
+        <div class="items-grid">
+            <!-- Sample bakery items with Add to Cart buttons -->
+            <div class="item">
+                <img src="{{ url_for('static', filename='../static/img/breads1.jpg') }}" alt="Artisan Bread" class="item-image">
+                <h3>Artisan Bread</h3>
+                <p>$5.00</p>
+                <button type="button" class="button" onclick="addToCart('Artisan Bread', 5.00)">Add to Cart</button>
+            </div>
+            <div class="item">
+                <img src="{{ url_for('static', filename='../static/img/chocolate-cake.jpg') }}" alt="Chocolate Cake" class="item-image">
+                <h3>Chocolate Cake</h3>
+                <p>$15.00</p>
+                <button type="button" class="button" onclick="addToCart('Chocolate Cake', 15.00)">Add to Cart</button>
+            </div>
+            <div class="item">
+                <img src="{{ url_for('static', filename='../static/img/fruitpastry.jpg') }}" alt="Fruit Pastry" class="item-image">
+                <h3>Fruit Pastry</h3>
+                <p>$3.50</p>
+                <button type="button" class="button" onclick="addToCart('Fruit Pastry', 3.50)">Add to Cart</button>
+            </div>
+            <div class="item">
+                <img src="{{ url_for('static', filename='../static/img/cheese croissant.jpg') }}" alt="Cheese Croissant" class="item-image">
+                <h3>Cheese Croissant</h3>
+                <p>$4.00</p>
+                <button type="button" class="button" onclick="addToCart('Cheese Croissant', 4.00)">Add to Cart</button>
+            </div>
+            <div class="item">
+                <img src="{{ url_for('static', filename='img/blueberry muffin.jpg') }}" alt="Blueberry Muffin" class="item-image">
+                <h3>Blueberry Muffin</h3>
+                <p>$2.50</p>
+                <button type="button" class="button" onclick="addToCart('Blueberry Muffin', 2.50)">Add to Cart</button>
+            </div>
+            <div class="item">
+                <img src="{{ url_for('static', filename='../static/img/sourdough bread.jpg') }}" alt="Sourdough Bread" class="item-image">
+                <h3>Sourdough Bread</h3>
+                <p>$6.00</p>
+                <button type="button" class="button" onclick="addToCart('Sourdough Bread', 6.00)">Add to Cart</button>
+            </div>
+        </div>
+
+        <!-- Cart Table Display -->
+        <div id="cart-section">
+            <h2>Your Cart</h2>
+            <table class="table" id="cart-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Price</th>
+                        <th>Total</th>
+                        <th>Action</th> <!-- Action column for removing items -->
+                    </tr>
+                </thead>
+                <tbody id="cart-items">
+                    <!-- Cart items will be dynamically inserted here -->
+                </tbody>
+            </table>
+            <h3 id="total-amount">Total Amount: $0</h3>
+        </div>
+
+        <!-- Checkout Section -->
+        <h2>Checkout</h2>
+        <form id="checkout-form">
+            <label for="address">Select Delivery Address:</label>
+            <select id="address" name="address">
+                <option value="Default Address">Default Address (Registered)</option>
+                <option value="new">New Address</option>
+            </select>
+            <input type="text" id="new-address" name="new_address" placeholder="Enter new address" style="display: none;">
+            
+            <label for="payment-method">Payment Method:</label>
+            <select id="payment-method" name="payment_method">
+                <option value="COD">Cash on Delivery</option>
+                <option value="Card">Card</option>
+                <option value="UPI">UPI</option>
+            </select>
+
+            <button type="button" id="place-order" class="button">Place Order</button>
+        </form>
+
+        <script>
+            let cart = [];
+            let total = 0;
+
+            function addToCart(itemName, price) {
+                // Check if the item already exists in the cart
+                const existingItem = cart.find(item => item.name === itemName);
+                if (existingItem) {
+                    existingItem.quantity += 1; // Increment quantity if item is already in cart
+                } else {
+                    let item = {
+                        name: itemName,
+                        price: parseFloat(price),
+                        quantity: 1,
+                        total: price
+                    };
+                    cart.push(item); // Add new item to cart
+                }
+                updateCartDisplay();
+            }
+
+            function updateCartDisplay() {
+                let cartTable = document.getElementById('cart-items');
+                cartTable.innerHTML = '';  // Clear current items
+
+                total = 0;  // Reset total amount
+                cart.forEach(item => {
+                    item.total = item.price * item.quantity; // Calculate total for each item
+                    let row = `<tr>
+                                    <td>${item.name}</td>
+                                    <td>${item.quantity}</td>
+                                    <td>$${item.price.toFixed(2)}</td>
+                                    <td>$${item.total.toFixed(2)}</td>
+                                    <td><button onclick="removeFromCart('${item.name}')">Remove</button></td>
+                               </tr>`;
+                    cartTable.innerHTML += row;
+                    total += item.total;  // Update total amount
+                });
+
+                document.getElementById('total-amount').innerText = `Total Amount: $${total.toFixed(2)}`;
+            }
+
+            function removeFromCart(itemName) {
+                cart = cart.filter(item => item.name !== itemName); // Remove item from cart
+                updateCartDisplay();
+            }
+
+            // Handle the place order button click
+            document.getElementById('place-order').addEventListener('click', function() {
+                const selectedAddress = document.getElementById('address').value;
+                let deliveryAddress = selectedAddress;
+
+                // If 'new' is selected, use the new address field value
+                if (selectedAddress === 'new') {
+                    deliveryAddress = document.getElementById('new-address').value;
+                    // Check if the new address is provided
+                    if (!deliveryAddress) {
+                        alert('Please enter your new address!');
+                        return; // Exit if the new address is not provided
+                    }
+                }
+
+                // Prepare the order data to send
+                const orderData = {
+                    address: deliveryAddress,
+                    payment_method: document.getElementById('payment-method').value,
+                    items: cart,  // Use the cart items directly
+                    total_price: total
+                };
+
+                // Send the order data to the server
+                fetch('/place_order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(orderData),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Order placed successfully!');
+                        cart = []; // Clear the cart after successful order
+                        updateCartDisplay();
+                    } else {
+                        alert('Error placing order. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            });
+
+            // Display or hide the new address field based on selection
+            document.getElementById('address').addEventListener('change', function() {
+                const newAddressField = document.getElementById('new-address');
+                if (this.value === 'new') {
+                    newAddressField.style.display = 'block';
+                } else {
+                    newAddressField.style.display = 'none';
+                }
+            });
+        </script>
+    </div>
+</body>
+</html>
