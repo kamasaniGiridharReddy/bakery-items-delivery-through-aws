@@ -34,11 +34,18 @@ def get_db_connection():
 # Test connection to verify connectivity
 def test_db_connection():
     try:
-        conn = mysql.connector.connect(**db_config)
-        conn.close()
+        # Added connection timeout to prevent long waits if the connection fails
+        conn = mysql.connector.connect(**db_config, connection_timeout=10)
         print("Database connection successful.")
+        conn.close()
     except mysql.connector.Error as err:
         print(f"Failed to connect to database: {err}")
+        if err.errno == mysql.connector.errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Check your username or password.")
+        elif err.errno == mysql.connector.errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist.")
+        else:
+            print("Could not establish connection. Please check your network and database settings.")
 
 # Call test function
 test_db_connection()
