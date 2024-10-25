@@ -1,318 +1,280 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+import os
+from flask import Flask, render_template, request, redirect, url_for, flash, session
+from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
+from mysql.connector import Error
+from functools import wraps
 from datetime import datetime
-from datetime import datetime, timezone
-datetime.now(timezone.utc)
-import mysql.connector.pooling
 
-app = Flask(__name__)
-app.secret_key = "your_secret_key"  # Needed for flash messages
+# Get the absolute path of the directory containing this file
+basedir = os.path.abspath(os.path.dirname(__file__))
 
-# Database configuration with connection pooling
+# Create the Flask app instance
+app = Flask(__name__, template_folder=os.path.join(basedir, 'templates'))
+app.secret_key = "Reddy@2001"  # Needed for flash messages and session
+
+# Database configuration
 db_config = {
-    'host': 'bakery.c3so6cw4syg4.ap-south-1.rds.amazonaws.com',
-    'user': 'root',
-    'password': 'Apurvareddy',
-    'database': 'bakery'
+    'host': 'database-1.c3so6cw4syg4.ap-south-1.rds.amazonaws.com',
+    'user': 'admin',
+    'password': 'CMmxQvym6nwUV4RbZWV7',
+    'database': 'edu'
 }
 
-# Connection pool setup
-cnxpool = mysql.connector.pooling.MySQLConnectionPool(pool_name="mypool",
-                                                      pool_size=5,
-                                                      **db_config)
-
-# Function to establish a database connection
+# Database connection function
 def get_db_connection():
     try:
-        connection = cnxpool.get_connection()
-        if connection is None:
-            raise Exception("Failed to get a database connection.")
+        connection = mysql.connector.connect(**db_config)
         return connection
-    except mysql.connector.Error as err:
-        print(f"Error: {err}")
+    except Error as e:
+        print(f"Error connecting to MySQL database: {e}")
         return None
-# Test connection to verify connectivity
-def test_db_connection():
-    try:
-        # Added connection timeout to prevent long waits if the connection fails
-        conn = mysql.connector.connect(**db_config, connection_timeout=10)
-        print("Database connection successful.")
-        conn.close()
-    except mysql.connector.Error as err:
-        print(f"Failed to connect to database: {err}")
-        if err.errno == mysql.connector.errorcode.ER_ACCESS_DENIED_ERROR:
-            print("Check your username or password.")
-        elif err.errno == mysql.connector.errorcode.ER_BAD_DB_ERROR:
-            print("Database does not exist.")
-        else:
-            print("Could not establish connection. Please check your network and database settings.")
 
-# Call test function
-test_db_connection()
+# Login required decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-
-@app.route('/')
-def home():
-    return render_template('base.html')
-
-@app.route('/Explore')
-def Explore():
-    return render_template('items.html')
-
-
-
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        name = request.form.get('name')
-        mobile = request.form.get('mobile')
-        email = request.form.get('email')
-        password = request.form.get('password')
-        default_address = request.form.get('default_address')
-
-        if not default_address:
-            flash('Default address is required!')
-            return redirect(url_for('register'))
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            'INSERT INTO users (name, mobile, email, password, address) VALUES (%s, %s, %s, %s, %s)',
-            (name, mobile, email, password, default_address))
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        flash('Thank you for registering!')
-        return redirect(url_for('login'))
-
-    return render_template('register.html')
-
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
-
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute('SELECT * FROM users WHERE email = %s AND password = %s', (email, password))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if user:
-            session['user_id'] = user['id']
-            session['user_name'] = user['name']
-            flash('Login successful!')
-            return redirect(url_for('HOME'))
+        
+        connection = get_db_connection()
+        if connection:
+            try:
+                cursor = connection.cursor()
+                cursor.execute("SELECT id, email, password FROM users WHERE email = %s", (email,))
+                user = cursor.fetchone()
+                
+                if user:
+                    user_id, user_email, hashed_password = user
+                    if check_password_hash(hashed_password, password):
+                        session['user_id'] = user_id
+                        print(session['user_id'])
+                        return redirect(url_for('home'))
+                    else:
+                        flash("Invalid email or password", "error")
+                else:
+                    flash("User not found", "error")
+                
+                return redirect(url_for('login'))
+            except mysql.connector.Error as e:
+                print(f"Error: {e}")
+                flash("An error occurred during login. Please try again.", "error")
+            finally:
+                cursor.close()
+                connection.close()
         else:
-            flash('Invalid email or password!')
-
+            flash("Unable to connect to the database. Please try again later.", "error")
+    
     return render_template('login.html')
 
-@app.route('/Home')
-def Home():
-    return render_template('base.html')
-@app.route('/HOME')
+@app.route("/home")
+def home():
+    if 'user_id' in session:
+        print(session['user_id'])
+        return render_template("index.html")
+    else:
+        # If user is not logged in, redirect to login page
+
+        return redirect(url_for('login'))
+
+
+@app.route("/about")
+def about():
+
+    return render_template("about.html")
+
+
+@app.route("/HOME")
 def HOME():
-    return render_template('base1.html')
-@app.route('/add_to_cart', methods=['POST'])
-def add_to_cart():
-    item_data = request.get_json()
-    item_name = item_data['name']
-    item_price = item_data['price']
-    item_quantity = item_data['quantity']
+    return render_template("index.html")
 
-    cart_items = session.get('cart_items', [])
+@app.route("/services")
+def services():
+    return render_template("services.html")
+
+
+
+
+@app.route("/pricing")
+def pricing():
+    return render_template("pricing.html")      
     
-    # Check if the item is already in the cart
-    item_found = False
-    for item in cart_items:
-        if item['name'] == item_name:
-            item['quantity'] += item_quantity
-            item_found = True
-            break
-    
-    if not item_found:
-        cart_items.append({
-            'name': item_name,
-            'price': item_price,
-            'quantity': item_quantity
-        })
 
-    session['cart_items'] = cart_items
-    return jsonify(success=True)
-
-@app.route('/items', methods=['GET', 'POST'])
-def items():
-    if request.method == 'POST':
-        # Handle adding items to the cart in session
-        item_name = request.form.get('name')
-        item_price = float(request.form.get('price'))
-        item_quantity = int(request.form.get('quantity'))
-
-        cart_items = session.get('cart_items', [])
-
-        # Check if item already exists in the cart
-        for item in cart_items:
-            if item['name'] == item_name:
-                item['quantity'] += item_quantity
-                break
-        else:
-            cart_items.append({'name': item_name, 'price': item_price, 'quantity': item_quantity})
-
-        session['cart_items'] = cart_items
-        flash(f'{item_name} added to your cart!')
-        return redirect(url_for('items'))
-
-    # Fetch items from the database for display
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute('SELECT item_id, item_name, price FROM items')
-    items = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
-    cart_items = session.get('cart_items', [])
-    return render_template('items.html', items=items, cart_items=cart_items)
-@app.route('/place_order', methods=['POST'])
-def place_order():
-    if 'user_id' not in session:
-        return jsonify(success=False, message="User not logged in")
-
-    # Fetch the data from the request
-    data = request.json
-    delivery_address = data.get('address')
-    payment_method = data.get('payment_method')
-
-    # Capture only the selected items from the cart
-    items = data.get('items', [])  # Get the items from the order data
-
-    if not items:  # Check if there are no items in the order
-        return jsonify(success=False, message="No items selected for the order.")
-
-    # Calculate total price
-    total_price = sum(item['price'] * item['quantity'] for item in items)
-
-    # Create a string of food item names
-    food_item_names = ', '.join([item['name'] for item in items])
-
-    try:
-        # Get the database connection
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Insert into orders table including food_item_names
-        cursor.execute('''
-            INSERT INTO orders (user_id, delivery_address, payment_method, status, order_date, total_price, food_items) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (session['user_id'], delivery_address, payment_method, 'Yet to Ship', datetime.now(), total_price, food_item_names))
-
-        # Check if the order was inserted successfully
-        order_id = cursor.lastrowid
-        if not order_id:
-            return jsonify(success=False, message="Failed to create order.")
-
-        # Insert each selected item into the order_items table
-        for item in items:
-            cursor.execute('''
-                INSERT INTO order_items (order_id, item_name, quantity, price) 
-                VALUES (%s, %s, %s, %s)
-            ''', (order_id, item['name'], item['quantity'], item['price']))
-
-        # Commit the transaction
-        conn.commit()
-
-        # Close cursor and connection
-        cursor.close()
-        conn.close()
-
-        # Return success response
-        return jsonify(success=True, message="Order placed successfully!")
-
-    except mysql.connector.Error as e:
-        # Rollback in case of error
-        if conn:
-            conn.rollback()
-        print(f"Database error occurred: {str(e)}")  # Log the error
-        return jsonify(success=False, message=str(e))
-
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        print(f"General error occurred: {str(e)}")
-        return jsonify(success=False, message="An unexpected error occurred.")
+@app.route("/contact")
+def contact():
 
 
+    return render_template("contact.html")  
 
-@app.route('/update_order_status', methods=['POST'])
-def update_order_status():
-    data = request.get_json()
-    order_id = data.get('order_id')
-    status = data.get('status')
+@app.route("/events")
+def events():
+    return render_template("events.html")  
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute('UPDATE orders SET status = %s WHERE id = %s', (status, order_id))
-        conn.commit()
-        return jsonify(success=True)
-    except mysql.connector.Error as err:
-        conn.rollback()  # Rollback in case of error
-        return jsonify(success=False, message=str(err))
-    finally:
-        cursor.close()
-        conn.close()
+@app.route("/testimonials")
+def testimonials():
+    return render_template("testimonials.html")   
+
+@app.route("/bookings")
+def bookings():
+    return render_template("bookings.html")
 
 
+@app.route("/register") 
+def register():
+    return render_template("book_event.html")
 
-@app.route('/admin_dashboard', methods=['GET', 'POST'])
-def admin_dashboard():
-    if request.method == 'POST':
-        order_id = request.form['order_id']
-        status = request.form['status']
 
-        conn = get_db_connection()
-        print(conn)
-        cursor = conn.cursor()
-        print(cursor)
-        try:
-            cursor.execute('UPDATE orders SET status = %s WHERE id = %s', (status, order_id))
-            conn.commit()
-            flash('Order status updated successfully!', 'success')
-        except mysql.connector.Error as err:
-            conn.rollback()  # Rollback in case of error
-            flash(f'An error occurred while updating the order: {err}', 'error')
-        finally:
-            cursor.close()
-            conn.close()
-    
-    # Fetch orders with user details and items
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute('''
-        SELECT o.id, o.total_price, o.status, o.order_date, u.name AS user_name,
-               GROUP_CONCAT(CONCAT(oi.item_name, ' (x', oi.quantity, ')') SEPARATOR ', ') AS items
-        FROM orders o
-        JOIN users u ON o.user_id = u.id
-        JOIN order_items oi ON o.id = oi.order_id
-        GROUP BY o.id
-    ''')
-    orders = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
-    return render_template('admin_dashboard.html', orders=orders)
-
-@app.route('/logout')
+@app.route("/logout")
 def logout():
     session.pop('user_id', None)
-    session.pop('user_name', None)
-    flash('You have been logged out.')
-    return redirect(url_for('home'))
+    return redirect(url_for('index'))
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000,debug=True)
+@app.route('/signup', methods=['GET', 'POST'])
+
+
+def signup():
+    if request.method == 'POST':
+        # Retrieve form data for user signup
+        full_name = request.form.get('full_name')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        phone = request.form.get('phone')
+
+        # Check if all required fields are present
+        if not all([full_name, email, password, confirm_password, phone]):
+            flash('All fields are required.', 'error')
+            return render_template('signup.html')
+
+        # Check if passwords match
+        if password != confirm_password:
+            flash('Passwords do not match!', 'error')
+            return render_template('signup.html')
+
+        # Hash the password
+
+        hashed_password = generate_password_hash(password)
+
+        try:
+            connection = get_db_connection()
+            with connection.cursor() as cursor:
+                # SQL query to insert data into the users table
+                sql = """INSERT INTO users 
+                         (full_name, email, password, phone) 
+                         VALUES (%s, %s, %s, %s)"""
+                values = (full_name, email, hashed_password, phone)
+
+                # Execute the query
+                cursor.execute(sql, values)
+            connection.commit()
+
+            flash('Account created successfully! Please log in.', 'success')
+            return redirect(url_for('login'))
+        except Error as e:
+            if 'Duplicate entry' in str(e):
+                flash('An account with this email already exists.', 'error')
+            else:
+
+
+
+                flash('An error occurred. Please try again.', 'error')
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            flash('An unexpected error occurred. Please try again.', 'error')
+        finally:
+            if connection:
+                connection.close()
+
+    return render_template('signup.html')
+
+@app.route("/book", methods=['GET', 'POST'])
+def book_event():
+    if request.method == 'POST':
+        # Retrieve form data for event booking
+        full_name = request.form.get('full_name')
+        email = request.form.get('email')
+        phone = request.form.get('phone')
+        course_name = request.form.get('course_name')
+        start_date = request.form.get('start_date')
+        student_count = request.form.get('student_count')
+        special_requests = request.form.get('special_requests')
+
+        # Check if all required fields are present
+        if not all([full_name, email, phone, course_name, start_date,student_count]):
+            flash('All fields except special requests are required.', 'error')
+            return render_template('book_event.html')
+
+        try:
+            connection = get_db_connection()
+            with connection.cursor() as cursor:
+                # SQL query to insert data into the event_bookings table
+                sql = """INSERT INTO CourseBookings 
+                         (full_name, email, phone, course_name, start_date, student_count, special_requests) 
+                         VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+                values = (full_name, email, phone, course_name, start_date, student_count, special_requests)
+
+                # Execute the query
+                cursor.execute(sql, values)
+
+            connection.commit()
+
+            flash('Event booked successfully! Thank you!', 'success')
+            return render_template('booking_success.html')
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            flash("Please Wait Tutor Will be contact you Soon")
+        finally:
+            if connection:
+                connection.close()
+
+    return render_template('book_event.html')
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    conn = get_db_connection()
+    if conn is None:
+        flash("Unable to connect to the database", "error")
+        return redirect(url_for('index'))
+
+    cursor = conn.cursor(dictionary=True)
+
+    # Fetch all event bookings
+    cursor.execute('''
+        SELECT id, full_name, email, course_name, start_date, student_count, special_requests
+        FROM CourseBookings
+        ORDER BY start_date DESC
+    ''')
+    
+    events = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+
+    return render_template('dashboard.html', events=events)
+
+
+    
+
+@app.context_processor
+def utility_processor():
+    def now():
+        return datetime.now()
+    return dict(now=now)
+
+if __name__ == "__main__":
+    print(f"Template folder: {app.template_folder}")  # Debug print
+    app.run(host='0.0.0.0', port=5000, debug=True)
