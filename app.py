@@ -15,7 +15,7 @@ app.secret_key = "Reddy@2001"  # Needed for flash messages and session
 
 # Database configuration
 db_config = {
-    'host': 'bakery.c3so6cw4syg4.ap-south-1.rds.amazonaws.com',
+    'host': 'bakery.cvg6e2ykqwxs.us-east-1.rds.amazonaws.com',
     'user': 'root',
     'password': 'Apurvareddy',
     'database': 'bakery'
